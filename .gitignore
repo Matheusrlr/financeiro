@@ -1,0 +1,9 @@
+.env
+data/financeiro.db
+data/uploads/*
+!data/uploads/.gitkeep
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
