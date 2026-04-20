@@ -2,66 +2,85 @@
 
 ## Propósito do produto
 
-Aplicação **pessoal** para enviar **faturas de cartão em PDF** (uso mensal planejado), extrair transações, classificar cada linha como gasto **essencial** vs **supérfluo** e visualizar **tendências de médio/longo prazo**. O objetivo do usuário é enxergar padrões de gasto e distinguir o que manter do que pode ser reduzido.
+Plataforma web **pessoal** para upload de **documentos financeiros em PDF** (faturas de cartão de crédito, extratos de investimento), extração automática de dados via IA, categorização inteligente e visualização de **tendências de gastos e investimentos** ao longo do tempo.
 
-Não é contabilidade formal nem substituto de conselho financeiro profissional; é uma ferramenta de **visibilidade** e reflexão com apoio de IA.
+O objetivo é ter **visibilidade total** das finanças pessoais num único lugar, com insights acionáveis gerados por IA. Não é contabilidade formal — é uma ferramenta de **reflexão financeira com apoio de IA**.
 
 ## Stack
 
 | Área | Tecnologia |
 |------|------------|
-| UI | Streamlit (`app/streamlit_app.py`) |
-| Dados | SQLite (`data/financeiro.db`, schema em `src/db/schema.sql`) |
-| PDF | `pdfplumber`, PyMuPDF — extração em `src/pdf/` |
-| IA | Google Gemini (`google-genai`), modelo em `src/config.py` (`GEMINI_MODEL`, hoje `gemini-2.5-flash`) |
-| Validação de JSON da IA | Pydantic (`src/ai/schemas.py`) |
+| Frontend | Next.js 15 (App Router) + React 19 + TypeScript |
+| Estilização | Tailwind CSS 4 + shadcn/ui |
+| Charts | Recharts ou Tremor |
+| Banco de dados | Supabase (PostgreSQL) com Drizzle ORM |
+| Storage | Supabase Storage (PDFs em bucket privado) |
+| Auth | Supabase Auth (magic link / Google OAuth) |
+| IA | LLM local (Ollama) via API OpenAI-compatible; `npm run analyze` |
+| Validação | Zod |
+| Deploy | Vercel |
 
 ## Configuração e execução
 
-- **Variável de ambiente:** `GEMINI_API_KEY` em `.env` na raiz do projeto (carregado por `python-dotenv` em `src/config.py`). Sem chave, upload pode funcionar até a parte de PDF, mas **categorização e consultoria falham** na chamada ao modelo.
-- **Diretórios de dados:** `src/config.py` define `DATA_DIR`, `UPLOADS_DIR`, `DB_PATH`. `ensure_data_dirs()` cria pastas se necessário.
-- **Rodar o dashboard:** a partir da raiz do repo, algo como: `streamlit run app/streamlit_app.py` (o app injeta a raiz no `sys.path`).
-
-Artefatos sensíveis (`.env`, banco, PDFs enviados) estão no `.gitignore`; não commitar segredos nem extratos reais se o remoto for público.
+- **Variáveis de ambiente:** em `.env.local` (não commitado). Template em `.env.example`.
+  - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
+  - `LOCAL_LLM_URL` (padrão: `http://localhost:11434/v1`), `LOCAL_LLM_MODEL` (padrão: `llama3.1`)
+- **Dev:** `npm run dev` (Next.js na porta 3000)
+- **Análise IA:** `npm run analyze` — roda extração e categorização via LLM local (requer Ollama ou compatível)
+- **Supabase local:** `npx supabase start` (opcional, para dev offline)
+- **Migrations:** Drizzle ORM — `npm run db:push` ou `npm run db:migrate`
 
 ## Fluxo principal (pipeline)
 
-1. **Upload** no Streamlit: bytes do PDF + `card_code` (`card_a` | `card_b`) + **mês de referência** `YYYY-MM`.
-2. **Armazenamento:** PDF salvo em `data/uploads/` com nome UUID; **hash SHA-256** evita reprocessar o mesmo arquivo (`process_upload` em `src/services/pipeline.py`).
-3. **Detecção de banco:** `src/pdf/bank_detect.py` lê texto das primeiras páginas e retorna `bank_a`, `bank_b` ou `generic` (marcadores configuráveis por instituição).
-4. **Parsing:** parsers específicos (`src/pdf/parsers/bank_a.py`, `bank_b.py`) ou heurística genérica em `src/pdf/parsers/base.py` (`ParsedTxn`: data `YYYY-MM-DD`, descrição, valor).
-5. **Categorização (Gemini):** `categorize_transactions` em `src/ai/client.py` — saída JSON validada como `CategorizationResponse`; categorias permitidas: **`necessario`** | **`superfluo`** (definições nos prompts em `src/ai/prompts.py`).
-6. **Persistência:** `Repository.insert_statement` + `insert_transactions`; categorias ficam na coluna `transactions.category`.
-7. **Cache de consultoria:** ao inserir transações de um mês, o cache de insights daquele mês é invalidado (`delete_consulting_cache`).
+1. **Upload** na UI: drag & drop do PDF + seleção do cartão.
+2. **Armazenamento:** PDF salvo no Supabase Storage com nome UUID; **hash SHA-256** evita reprocessar o mesmo arquivo.
+3. **Extração via IA:** texto do PDF enviado ao Claude, que retorna JSON estruturado com transações (data, descrição, valor) + mês de referência.
+4. **Categorização via IA:** Claude categoriza cada transação: `necessario` | `superfluo` | `investimento`.
+5. **Persistência:** transações salvas via Drizzle ORM no PostgreSQL.
+6. **Cache de insights:** ao inserir transações de um mês, cache de insights é invalidado.
 
 ## Modelo de dados (conceitos)
 
-- **`reference_month`:** string `YYYY-MM`, eixo principal de agregação (não confundir com data individual da compra `txn_date`).
-- **`cards`:** códigos fixos seedados (`card_a`, `card_b`); rótulos exibidos na UI.
-- **`statements`:** uma linha por PDF processado (arquivo original, caminho guardado, banco detectado, hash).
-- **`transactions`:** uma linha por transação parseada, sempre com `category` ∈ `necessario` | `superfluo`.
-- **`consulting_cache`:** JSON serializado dos insights do Gemini para o mês (evita re-chamar o modelo; botão “Regenerar insights” força nova geração).
+- **`reference_month`:** string `YYYY-MM`, eixo principal de agregação.
+- **`documents`:** uma linha por PDF processado (tipo, hash, status, source detectado).
+- **`cards`:** cartões do usuário (nome, banco, cor).
+- **`transactions`:** uma linha por transação, com `category` ∈ `necessario` | `superfluo` | `investimento`.
+- **`investments`:** (Fase 2) posições e movimentações de ativos.
+- **`insights_cache`:** JSON dos insights da IA para o mês (evita re-chamar o modelo).
+- **RLS:** todas as tabelas com Row Level Security — `user_id = auth.uid()`.
 
-## Camada de análise e IA
+## Camada de IA
 
-- **Agregações:** `src/services/analytics.py` — totais por mês, histórico para gráficos, payload para consultoria (`build_consulting_payload`: totais atuais, totais por cartão, histórico dos últimos N meses).
-- **Consultoria:** `src/services/consulting.py` — lê cache ou chama `generate_consulting`; estrutura esperada em `ConsultingResponse` (`summary`, `month_over_month`, `leaks`, `tips`).
+- **Extração de PDF:** LLM recebe texto bruto → retorna transações estruturadas em JSON (validado com Zod). Isso substitui regex por banco — escala para qualquer instituição.
+- **Categorização:** LLM classifica cada transação com definições claras de categoria.
+- **Consultoria mensal:** resumo, comparação mês a mês, vazamentos de dinheiro, dicas. Cache no banco.
+- **Provider:** LLM local via API OpenAI-compatible (`src/lib/ai/client.ts`). Padrão: Ollama com `llama3.1`. Executado via `npm run analyze`.
+- **Migração futura:** client preparado para trocar provider (Anthropic, OpenAI, etc.) alterando apenas `src/lib/ai/client.ts`.
 
 ## Onde estender o sistema
 
 | Objetivo | Onde olhar |
 |----------|------------|
-| Novo layout de banco | Novo parser + marcadores em `bank_detect.py` + ramo em `parse_statement_pdf` (`pipeline.py`) |
-| Ajustar o que é “necessário” vs “supérfluo” | `categorization_prompt` em `src/ai/prompts.py` |
-| Novo cartão no sistema | Inserir linha em `cards` (ou estender seed em `repository.py` / migration manual no SQLite) e UI em `streamlit_app.py` |
-| Mudar modelo Gemini | `GEMINI_MODEL` em `src/config.py` |
+| Novo tipo de documento | Prompt de extração em `src/lib/ai/`, tipo no enum de `documents` |
+| Ajustar categorias | Prompt de categorização em `src/lib/ai/prompts.ts` |
+| Novo cartão/corretora | UI de gestão de cartões, schema Drizzle |
+| Mudar modelo de IA | `src/lib/ai/` — trocar modelo no client |
+| Novo tipo de investimento | Enum `asset_type` no schema, prompt de extração |
 
-## Convenções e armadilhas
+## Convenções
 
-- Índices das transações na categorização são **0-based** e devem bater com a lista enviada ao modelo; há fallback por valor+descrição e default **`necessario`** se faltar item (`apply_categories_to_transactions`).
-- Duplicata de PDF é bloqueada por hash; mensagens de erro ao usuário vêm de `ValueError` no pipeline.
-- Textos de interface e prompts estão em **português**; mantenha coerência ao alterar copy ou instruções do modelo.
+- **Linguagem:** TypeScript strict, sem `any`.
+- **UI:** todos os textos em **português brasileiro**.
+- **Componentes:** shadcn/ui como base, customizar com Tailwind.
+- **API Routes:** Next.js Route Handlers em `src/app/api/`.
+- **Validação:** Zod em toda fronteira (input do usuário, resposta da IA, params de API).
+- **Commits:** mensagens em inglês, descritivas.
+- **Segurança:** nunca expor `SUPABASE_SERVICE_ROLE_KEY` no client. Usar server-side apenas.
+
+## Especificação completa
+
+Detalhes em `.specs/project/PROJECT.md` e `.specs/project/ROADMAP.md`.
 
 ## Resumo em uma frase
 
-**Pipeline:** PDF → detecção de banco → parse de linhas → Gemini classifica `necessario`/`superfluo` → SQLite → Streamlit (métricas, gráficos, tabela, insights com cache).
+**Pipeline:** PDF → upload (Supabase Storage) → `npm run analyze` (LLM local extrai + categoriza) → PostgreSQL (Supabase) → Next.js dashboard (métricas, gráficos, tabela, insights com cache).
