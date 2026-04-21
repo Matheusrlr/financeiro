@@ -1,105 +1,49 @@
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { redirect } from "next/navigation"
+import { createClient } from "@/lib/supabase/server"
+import { db } from "@/db/index"
+import { cards, transactions } from "@/db/schema"
+import { eq, and, gte } from "drizzle-orm"
+import { DashboardClient } from "@/components/dashboard/dashboard-client"
 
-export default function DashboardPage() {
-  return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight">Dashboard</h2>
-        <p className="text-muted-foreground">
-          Visao geral das suas financas pessoais.
-        </p>
-      </div>
+export default async function DashboardPage() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
 
-      {/* Metrics */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Gasto total</CardDescription>
-            <CardTitle className="text-2xl">R$ 0,00</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xs text-muted-foreground">
-              Nenhum dado ainda. Faca upload de uma fatura.
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Necessario</CardDescription>
-            <CardTitle className="text-2xl text-emerald-600">
-              R$ 0,00
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xs text-muted-foreground">
-              Despesas essenciais
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Superfluo</CardDescription>
-            <CardTitle className="text-2xl text-amber-600">R$ 0,00</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xs text-muted-foreground">
-              Gastos nao essenciais
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Investimento</CardDescription>
-            <CardTitle className="text-2xl text-blue-600">R$ 0,00</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xs text-muted-foreground">Aportes do mes</p>
-          </CardContent>
-        </Card>
-      </div>
+  if (!user) redirect("/login")
 
-      {/* Charts placeholder */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Evolucao mensal</CardTitle>
-            <CardDescription>Gastos totais mes a mes</CardDescription>
-          </CardHeader>
-          <CardContent className="flex h-64 items-center justify-center text-muted-foreground">
-            Graficos serao exibidos quando houver dados.
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Distribuicao por categoria</CardTitle>
-            <CardDescription>
-              Necessario vs superfluo vs investimento
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex h-64 items-center justify-center text-muted-foreground">
-            Graficos serao exibidos quando houver dados.
-          </CardContent>
-        </Card>
-      </div>
+  const now = new Date()
+  const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1)
+    .toISOString()
+    .slice(0, 7)
 
-      {/* AI Insights placeholder */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Insights com IA</CardTitle>
-          <CardDescription>
-            Analise mensal gerada automaticamente
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="text-muted-foreground">
-          Faca upload de faturas para receber insights personalizados.
-        </CardContent>
-      </Card>
-    </div>
-  );
+  const [cardRows, txRows] = await Promise.all([
+    db.select().from(cards).where(eq(cards.userId, user.id)),
+    db
+      .select()
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.userId, user.id),
+          gte(transactions.referenceMonth, sixMonthsAgo)
+        )
+      ),
+  ])
+
+  const cardList = cardRows.map((c) => ({
+    id: c.id,
+    name: c.name,
+    bankCode: c.bankCode,
+    color: c.color ?? "#6366f1",
+    createdAt: c.createdAt.toISOString(),
+  }))
+
+  const txList = txRows.map((t) => ({
+    id: t.id,
+    cardId: t.cardId ?? undefined,
+    amount: Number(t.amount),
+    category: t.category as "necessario" | "superfluo" | "investimento",
+    referenceMonth: t.referenceMonth,
+  }))
+
+  return <DashboardClient cards={cardList} transactions={txList} />
 }
