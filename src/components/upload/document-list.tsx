@@ -9,6 +9,7 @@ interface DocumentListProps {
     fileName: string
     referenceMonth: string
     status: "processing" | "completed" | "error"
+    type: "credit_card_statement" | "investment_statement"
     createdAt: string
   }>
   loading: boolean
@@ -26,6 +27,21 @@ function StatusBadge({ status }: { status: DocumentListProps["documents"][number
     return <Badge variant="default" className="bg-emerald-600">Concluído</Badge>
   }
   return <Badge variant="destructive">Erro</Badge>
+}
+
+function TypeBadge({ type }: { type: DocumentListProps["documents"][number]["type"] }) {
+  if (type === "investment_statement") {
+    return (
+      <Badge variant="outline" className="text-blue-600 border-blue-400">
+        Investimento
+      </Badge>
+    )
+  }
+  return (
+    <Badge variant="outline" className="text-amber-700 border-amber-400">
+      Fatura
+    </Badge>
+  )
 }
 
 export function DocumentList({ documents, loading }: DocumentListProps) {
@@ -54,8 +70,11 @@ export function DocumentList({ documents, loading }: DocumentListProps) {
           key={doc.id}
           className="flex items-center justify-between rounded-lg border p-3"
         >
-          <div className="space-y-0.5">
-            <p className="text-sm font-medium">{doc.fileName}</p>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-medium">{doc.fileName}</p>
+              <TypeBadge type={doc.type} />
+            </div>
             <p className="text-xs text-muted-foreground">
               Referência: {doc.referenceMonth} &middot;{" "}
               {new Intl.DateTimeFormat("pt-BR", {

@@ -1,12 +1,19 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useRef, useState, useEffect } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
+import { currentMonth } from "@/lib/utils"
+
+interface Card {
+  id: string
+  name: string
+  bankCode: string
+}
 
 interface DropzoneProps {
   onUploadSuccess: (documentId: string) => void
-  documentType?: "credit_card_statement" | "investment_statement"
+  cards: Card[]
 }
 
 type UploadState = "idle" | "dragging" | "validating" | "uploading" | "success" | "error"
@@ -17,10 +24,32 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-export function Dropzone({ onUploadSuccess, documentType = "credit_card_statement" }: DropzoneProps) {
+function autoDetectCard(fileName: string, cards: Card[]): string {
+  const lower = fileName.toLowerCase()
+  if (lower.includes("inter")) {
+    const found = cards.find((c) => c.bankCode.toLowerCase() === "inter")
+    if (found) return found.id
+  }
+  if (lower.includes("nubank") || lower.includes("nu_")) {
+    const found = cards.find((c) => c.bankCode.toLowerCase() === "nubank")
+    if (found) return found.id
+  }
+  return ""
+}
+
+export function Dropzone({ onUploadSuccess, cards }: DropzoneProps) {
   const [state, setState] = useState<UploadState>("idle")
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [selectedCardId, setSelectedCardId] = useState<string>("")
+  const [referenceMonth, setReferenceMonth] = useState<string>(currentMonth())
   const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (selectedFile) {
+      const detected = autoDetectCard(selectedFile.name, cards)
+      setSelectedCardId(detected)
+    }
+  }, [selectedFile, cards])
 
   function validateFile(file: File): string | null {
     if (file.type !== "application/pdf") return "Apenas arquivos PDF são aceitos"
@@ -48,7 +77,7 @@ export function Dropzone({ onUploadSuccess, documentType = "credit_card_statemen
   }
 
   function handleDragLeave() {
-    setState(selectedFile ? "idle" : "idle")
+    setState("idle")
   }
 
   function handleDrop(e: React.DragEvent) {
@@ -62,26 +91,29 @@ export function Dropzone({ onUploadSuccess, documentType = "credit_card_statemen
 
     const formData = new FormData()
     formData.append("file", selectedFile)
-    formData.append("type", documentType)
+    formData.append("referenceMonth", referenceMonth)
+    if (selectedCardId) formData.append("cardId", selectedCardId)
 
     try {
       const res = await fetch("/api/upload", { method: "POST", body: formData })
       const data = await res.json()
 
       if (res.status === 201) {
-        toast.success("Fatura enviada! Processamento iniciado.")
+        toast.success("Arquivo enviado! Processando em segundo plano.")
         setSelectedFile(null)
+        setSelectedCardId("")
+        setReferenceMonth(currentMonth())
         setState("idle")
         onUploadSuccess(data.documentId)
       } else if (res.status === 409) {
-        toast.error("Esta fatura já foi enviada anteriormente.")
+        toast.error("Este arquivo já foi enviado anteriormente.")
         setState("idle")
       } else {
-        toast.error("Erro ao enviar fatura. Tente novamente.")
+        toast.error("Erro ao enviar arquivo. Tente novamente.")
         setState("idle")
       }
     } catch {
-      toast.error("Erro ao enviar fatura. Tente novamente.")
+      toast.error("Erro ao enviar arquivo. Tente novamente.")
       setState("idle")
     }
   }
@@ -113,7 +145,7 @@ export function Dropzone({ onUploadSuccess, documentType = "credit_card_statemen
         {!selectedFile ? (
           <div className="text-center text-muted-foreground">
             <p className="text-sm font-medium">Arraste um PDF ou clique para selecionar</p>
-            <p className="mt-1 text-xs">Máximo 10MB</p>
+            <p className="mt-1 text-xs">Fatura de cartão ou extrato de investimento · Máximo 10MB</p>
           </div>
         ) : (
           <div className="text-center">
@@ -124,16 +156,46 @@ export function Dropzone({ onUploadSuccess, documentType = "credit_card_statemen
       </div>
 
       {selectedFile && (
-        <Button onClick={handleUpload} disabled={isUploading} className="w-full">
-          {isUploading ? (
-            <span className="flex items-center gap-2">
-              <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-              Enviando...
-            </span>
-          ) : (
-            documentType === "investment_statement" ? "Enviar extrato" : "Enviar fatura"
-          )}
-        </Button>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Cartão</label>
+              <select
+                value={selectedCardId}
+                onChange={(e) => setSelectedCardId(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">Auto-detectar</option>
+                {cards.map((card) => (
+                  <option key={card.id} value={card.id}>
+                    {card.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Mês de referência</label>
+              <input
+                type="month"
+                value={referenceMonth}
+                onChange={(e) => setReferenceMonth(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+          </div>
+
+          <Button onClick={handleUpload} disabled={isUploading} className="w-full">
+            {isUploading ? (
+              <span className="flex items-center gap-2">
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                Enviando...
+              </span>
+            ) : (
+              "Enviar PDF"
+            )}
+          </Button>
+        </div>
       )}
     </div>
   )

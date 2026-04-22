@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 import { db } from "@/db/index"
 import { documents } from "@/db/schema"
-import { sha256Hash, currentMonth } from "@/lib/utils"
+import { sha256Hash, currentMonth, detectDocumentType } from "@/lib/utils"
 import { and, eq } from "drizzle-orm"
 
 export async function POST(request: NextRequest) {
@@ -16,6 +16,8 @@ export async function POST(request: NextRequest) {
 
   const formData = await request.formData()
   const file = formData.get("file")
+  const cardId = formData.get("cardId")
+  const referenceMonthInput = formData.get("referenceMonth")
 
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "invalid_type" }, { status: 400 })
@@ -29,18 +31,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "file_too_large" }, { status: 400 })
   }
 
-  const rawType = formData.get("type")
-  const validDocTypes = ["credit_card_statement", "investment_statement"] as const
-  type DocType = typeof validDocTypes[number]
+  // Validate referenceMonth if provided
+  const refMonthValue = typeof referenceMonthInput === "string" && /^\d{4}-\d{2}$/.test(referenceMonthInput)
+    ? referenceMonthInput
+    : currentMonth()
 
-  let docType: DocType = "credit_card_statement"
-  if (rawType !== null) {
-    if (!validDocTypes.includes(rawType as DocType)) {
-      return NextResponse.json({ error: "invalid_document_type" }, { status: 400 })
-    }
-    docType = rawType as DocType
-  }
+  // Validate cardId if provided
+  const cardIdValue = typeof cardId === "string" && cardId.length > 0 ? cardId : null
 
+  const docType = detectDocumentType(file.name)
   const hash = await sha256Hash(file)
 
   let existing: typeof documents.$inferSelect[]
@@ -66,11 +65,11 @@ export async function POST(request: NextRequest) {
 
   const { error: storageError } = await supabaseAdmin.storage
     .from("documents")
-    .upload(storagePath, buffer, { contentType: "application/pdf", upsert: false })
+    .upload(storagePath, buffer, { contentType: "application/pdf", upsert: true })
 
   if (storageError) {
     console.error("Storage upload failed:", JSON.stringify(storageError))
-    return NextResponse.json({ error: "storage_error" }, { status: 500 })
+    return NextResponse.json({ error: "storage_error", detail: storageError.message }, { status: 500 })
   }
 
   let inserted: typeof documents.$inferSelect[]
@@ -83,8 +82,9 @@ export async function POST(request: NextRequest) {
         fileName: file.name,
         storagePath,
         fileHash: hash,
-        referenceMonth: currentMonth(),
+        referenceMonth: refMonthValue,
         status: "processing",
+        metadata: cardIdValue ? { cardId: cardIdValue } : null,
       })
       .returning()
   } catch (err) {
@@ -92,8 +92,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "database_error", detail: "failed to save document record" }, { status: 500 })
   }
 
+  const documentId = inserted[0].id
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
+
+  // Fire-and-forget: trigger processing without blocking the upload response
+  fetch(`${appUrl}/api/process/${documentId}`, {
+    method: "POST",
+    headers: { cookie: request.headers.get("cookie") ?? "" },
+  }).catch((err) => console.error("Failed to trigger processing:", err))
+
   return NextResponse.json(
-    { documentId: inserted[0].id, status: "processing" },
+    { documentId, status: "processing" },
     { status: 201 }
   )
 }

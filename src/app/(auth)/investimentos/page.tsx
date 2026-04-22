@@ -1,3 +1,6 @@
+"use client"
+
+import { useState } from "react"
 import {
   Card,
   CardContent,
@@ -5,15 +8,23 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { MonthSelector } from "@/components/dashboard/month-selector"
+
+function lastSixMonths(): string[] {
+  const months: string[] = []
+  const now = new Date()
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    months.push(d.toISOString().slice(0, 7))
+  }
+  return months
+}
+
+const AVAILABLE_MONTHS = lastSixMonths()
 
 export default function InvestimentosPage() {
+  const [selectedMonths, setSelectedMonths] = useState<string[]>(AVAILABLE_MONTHS)
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -23,16 +34,11 @@ export default function InvestimentosPage() {
             Acompanhe a evolução do seu patrimônio.
           </p>
         </div>
-        <Select defaultValue="todos">
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="Filtrar por tipo" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todos</SelectItem>
-            <SelectItem value="brasileiro">Brasileiro</SelectItem>
-            <SelectItem value="estrangeiro">Estrangeiro</SelectItem>
-          </SelectContent>
-        </Select>
+        <MonthSelector
+          months={AVAILABLE_MONTHS}
+          selected={selectedMonths}
+          onChange={setSelectedMonths}
+        />
       </div>
 
       {/* Metric cards */}

@@ -22,3 +22,11 @@ export function resolveCardColor(card: { bankCode: string; color: string }): str
   if (code === "nubank") return "#800ACE"
   return card.color
 }
+
+export function detectDocumentType(filename: string): "credit_card_statement" | "investment_statement" {
+  const lower = filename.toLowerCase()
+  const investmentKeywords = ["extrato", "invest", "portfolio", "xp", "btg", "warren", "genial", "modal", "clear", "rico"]
+  return investmentKeywords.some((k) => lower.includes(k))
+    ? "investment_statement"
+    : "credit_card_statement"
+}

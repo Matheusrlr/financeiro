@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import {
   Card,
@@ -10,8 +10,10 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { CardSelector } from "./card-selector"
+import { MonthSelector } from "./month-selector"
 import { MonthlyEvolutionChart } from "./charts/monthly-evolution-chart"
 import { CategoryDistributionChart } from "./charts/category-distribution-chart"
+import { MonthComparisonChart } from "./charts/month-comparison-chart"
 import { CardList } from "@/components/cards/card-list"
 
 export interface CardItem {
@@ -44,10 +46,15 @@ export function DashboardClient({ cards, transactions }: DashboardClientProps) {
   const router = useRouter()
   const [selectedCardId, setSelectedCardId] = useState("all")
 
-  const filtered =
-    selectedCardId === "all"
-      ? transactions
-      : transactions.filter((t) => t.cardId === selectedCardId)
+  const availableMonths = useMemo(
+    () => Array.from(new Set(transactions.map((t) => t.referenceMonth))).sort(),
+    [transactions]
+  )
+  const [selectedMonths, setSelectedMonths] = useState<string[]>(availableMonths)
+
+  const filtered = transactions
+    .filter((t) => selectedCardId === "all" || t.cardId === selectedCardId)
+    .filter((t) => selectedMonths.length === 0 || selectedMonths.includes(t.referenceMonth))
 
   const total = filtered.reduce((sum, t) => sum + t.amount, 0)
   const necessario = filtered
@@ -75,19 +82,37 @@ export function DashboardClient({ cards, transactions }: DashboardClientProps) {
 
   const categoryData = { necessario, superfluo, investimento }
 
+  // Build month comparison chart data
+  const comparisonData = [...selectedMonths].sort().map((month) => {
+    const monthTxs = filtered.filter((t) => t.referenceMonth === month)
+    return {
+      month,
+      necessario: monthTxs.filter((t) => t.category === "necessario").reduce((s, t) => s + t.amount, 0),
+      superfluo: monthTxs.filter((t) => t.category === "superfluo").reduce((s, t) => s + t.amount, 0),
+      investimento: monthTxs.filter((t) => t.category === "investimento").reduce((s, t) => s + t.amount, 0),
+    }
+  })
+
   return (
     <div className="space-y-6">
-      {/* Header with card filter */}
+      {/* Header with filters */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Dashboard</h2>
           <p className="text-muted-foreground">Visão geral das suas finanças pessoais.</p>
         </div>
-        <CardSelector
-          cards={cards}
-          value={selectedCardId}
-          onChange={setSelectedCardId}
-        />
+        <div className="flex items-center gap-2">
+          <MonthSelector
+            months={availableMonths}
+            selected={selectedMonths}
+            onChange={setSelectedMonths}
+          />
+          <CardSelector
+            cards={cards}
+            value={selectedCardId}
+            onChange={setSelectedCardId}
+          />
+        </div>
       </div>
 
       {/* Metrics */}
@@ -159,6 +184,17 @@ export function DashboardClient({ cards, transactions }: DashboardClientProps) {
           </CardContent>
         </Card>
       </div>
+
+      {/* Month comparison chart */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Comparação entre meses</CardTitle>
+          <CardDescription>Gastos por categoria em cada mês selecionado</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <MonthComparisonChart data={comparisonData} />
+        </CardContent>
+      </Card>
 
       {/* Card management */}
       <Card>
