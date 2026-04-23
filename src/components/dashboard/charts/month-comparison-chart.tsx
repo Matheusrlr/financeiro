@@ -9,6 +9,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts"
+import { monthLabel } from "@/lib/analytics"
 
 export interface MonthComparisonEntry {
   month: string
@@ -26,12 +27,6 @@ const currencyFormatter = new Intl.NumberFormat("pt-BR", {
   currency: "BRL",
 })
 
-function formatMonth(ym: string) {
-  const [year, month] = ym.split("-")
-  const date = new Date(Number(year), Number(month) - 1, 1)
-  return date.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" })
-}
-
 export function MonthComparisonChart({ data }: MonthComparisonChartProps) {
   if (data.length === 0) {
     return (
@@ -41,7 +36,7 @@ export function MonthComparisonChart({ data }: MonthComparisonChartProps) {
     )
   }
 
-  const formatted = data.map((d) => ({ ...d, month: formatMonth(d.month) }))
+  const formatted = data.map((d) => ({ ...d, month: monthLabel(d.month) }))
 
   return (
     <ResponsiveContainer width="100%" height={256}>

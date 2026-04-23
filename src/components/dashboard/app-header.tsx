@@ -45,6 +45,12 @@ export function AppHeader({ userEmail }: { userEmail: string }) {
             >
               Transacoes
             </Link>
+            <Link
+              href="/settings"
+              className="inline-flex items-center justify-center rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+            >
+              Configurações
+            </Link>
           </nav>
         </div>
         <div className="flex items-center gap-3">

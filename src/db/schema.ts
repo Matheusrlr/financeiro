@@ -116,6 +116,33 @@ export const transactions = pgTable(
   ]
 );
 
+// ── Budgets ────────────────────────────────────────────
+export const budgets = pgTable(
+  "budgets",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id").notNull(),
+    category: categoryEnum("category").notNull(),
+    monthlyLimit: numeric("monthly_limit", { precision: 12, scale: 2 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [uniqueIndex("budgets_user_category_idx").on(table.userId, table.category)]
+);
+
+// ── User Settings ──────────────────────────────────────
+export const userSettings = pgTable("user_settings", {
+  userId: uuid("user_id").primaryKey(),
+  monthlyIncome: numeric("monthly_income", { precision: 12, scale: 2 }),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
 // ── Insights Cache ─────────────────────────────────────
 export const insightsCache = pgTable(
   "insights_cache",
