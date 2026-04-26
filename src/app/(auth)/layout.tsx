@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { AppHeader } from "@/components/dashboard/app-header";
+import { Sidebar } from "@/components/layout/sidebar";
 
 export default async function AuthLayout({
   children,
@@ -17,9 +17,11 @@ export default async function AuthLayout({
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <AppHeader userEmail={user.email ?? ""} />
-      <main className="flex-1 container mx-auto px-4 py-6">{children}</main>
+    <div className="flex min-h-screen">
+      <Sidebar userEmail={user.email ?? ""} />
+      <div className="flex-1 flex flex-col min-w-0 overflow-auto">
+        <main className="flex-1">{children}</main>
+      </div>
     </div>
   );
 }

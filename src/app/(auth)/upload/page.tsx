@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { db } from "@/db/index"
-import { documents, cards } from "@/db/schema"
+import { documents, cards, investmentAccounts } from "@/db/schema"
 import { eq, desc } from "drizzle-orm"
 import { UploadSection } from "@/components/upload/upload-section"
 
@@ -11,7 +11,7 @@ export default async function UploadPage() {
 
   if (!user) redirect("/login")
 
-  const [allDocs, cardRows] = await Promise.all([
+  const [allDocs, cardRows, accountRows] = await Promise.all([
     db
       .select()
       .from(documents)
@@ -21,6 +21,10 @@ export default async function UploadPage() {
       .select()
       .from(cards)
       .where(eq(cards.userId, user.id)),
+    db
+      .select()
+      .from(investmentAccounts)
+      .where(eq(investmentAccounts.userId, user.id)),
   ])
 
   const mappedDocs = allDocs.map((doc) => ({
@@ -38,6 +42,12 @@ export default async function UploadPage() {
     bankCode: c.bankCode,
   }))
 
+  const mappedAccounts = accountRows.map((a) => ({
+    id: a.id,
+    name: a.name,
+    bankCode: a.bankCode,
+  }))
+
   return (
     <div className="space-y-8">
       <div>
@@ -47,7 +57,7 @@ export default async function UploadPage() {
         </p>
       </div>
 
-      <UploadSection documents={mappedDocs} cards={mappedCards} />
+      <UploadSection documents={mappedDocs} cards={mappedCards} investmentAccounts={mappedAccounts} />
     </div>
   )
 }

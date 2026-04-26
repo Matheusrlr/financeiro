@@ -117,6 +117,21 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+:root {
+  /* Category semantic colors */
+  --cat-necessario: #23d619;
+  --cat-superfluo: #f72743;
+  --cat-investimento: #407BB1;
+
+  /* Bank brand colors */
+  --bank-inter: #EC811D;
+  --bank-nubank: #800ACE;
+
+  /* Fintech typography */
+  --font-fin-sans: var(--font-inter-tight), var(--font-geist-sans), system-ui, sans-serif;
+  --font-fin-mono: var(--font-jetbrains-mono), var(--font-geist-mono), ui-monospace, monospace;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -127,4 +142,26 @@
   html {
     @apply font-sans;
   }
+}
+
+/* Fintech number formatting */
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+.fin-mono {
+  font-family: var(--font-fin-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Dashboard animations */
+@keyframes fadeIn {
+  from { opacity: 0 }
+  to { opacity: 1 }
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(20px); opacity: 0 }
+  to { transform: translateX(0); opacity: 1 }
 }

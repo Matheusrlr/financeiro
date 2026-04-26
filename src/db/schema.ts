@@ -143,6 +143,144 @@ export const userSettings = pgTable("user_settings", {
     .notNull(),
 });
 
+// ── Investment Accounts ────────────────────────────────
+export const investmentAccounts = pgTable("investment_accounts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").notNull(),
+  name: text("name").notNull(),
+  bankCode: text("bank_code").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ── Investment Reports (monthly snapshots) ─────────────
+export const investmentReports = pgTable(
+  "investment_reports",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id").notNull(),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => investmentAccounts.id, { onDelete: "cascade" }),
+    referenceMonth: text("reference_month").notNull(), // "YYYY-MM"
+    inceptionDate: text("inception_date"),             // "YYYY-MM-DD"
+    patrimony: numeric("patrimony", { precision: 14, scale: 2 }),
+    previousPatrimony: numeric("previous_patrimony", { precision: 14, scale: 2 }),
+    contributions: numeric("contributions", { precision: 14, scale: 2 }),
+    withdrawals: numeric("withdrawals", { precision: 14, scale: 2 }),
+    financialEvents: numeric("financial_events", { precision: 14, scale: 2 }),
+    gainsMonth: numeric("gains_month", { precision: 14, scale: 2 }),
+    returnMonthPct: numeric("return_month_pct", { precision: 8, scale: 4 }),
+    returnYearPct: numeric("return_year_pct", { precision: 8, scale: 4 }),
+    returnInceptionPct: numeric("return_inception_pct", { precision: 8, scale: 4 }),
+    totalContributed: numeric("total_contributed", { precision: 14, scale: 2 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("investment_reports_user_account_month_idx").on(
+      table.userId,
+      table.accountId,
+      table.referenceMonth
+    ),
+  ]
+);
+
+// ── Investment Holdings (assets per snapshot) ──────────
+export const investmentHoldings = pgTable("investment_holdings", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  reportId: uuid("report_id")
+    .notNull()
+    .references(() => investmentReports.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull(),
+  strategy: text("strategy").notNull(),
+  assetName: text("asset_name").notNull(),
+  ticker: text("ticker"),
+  previousBalance: numeric("previous_balance", { precision: 14, scale: 2 }),
+  contributions: numeric("contributions", { precision: 14, scale: 2 }),
+  withdrawals: numeric("withdrawals", { precision: 14, scale: 2 }),
+  events: numeric("events", { precision: 14, scale: 2 }),
+  balance: numeric("balance", { precision: 14, scale: 2 }),
+  returnMonthPct: numeric("return_month_pct", { precision: 8, scale: 4 }),
+  return12mPct: numeric("return_12m_pct", { precision: 8, scale: 4 }),
+  returnInceptionPct: numeric("return_inception_pct", { precision: 8, scale: 4 }),
+  sharePct: numeric("share_pct", { precision: 8, scale: 4 }),
+  isTaxExempt: boolean("is_tax_exempt").default(false).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ── Investment Returns History ─────────────────────────
+export const investmentReturnsHistory = pgTable(
+  "investment_returns_history",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id").notNull(),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => investmentAccounts.id, { onDelete: "cascade" }),
+    referenceMonth: text("reference_month").notNull(), // "YYYY-MM"
+    portfolioPct: numeric("portfolio_pct", { precision: 8, scale: 4 }),
+    cdiPct: numeric("cdi_pct", { precision: 8, scale: 4 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("investment_returns_history_user_account_month_idx").on(
+      table.userId,
+      table.accountId,
+      table.referenceMonth
+    ),
+  ]
+);
+
+// ── Investment Allocation History ──────────────────────
+export const investmentAllocationHistory = pgTable(
+  "investment_allocation_history",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id").notNull(),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => investmentAccounts.id, { onDelete: "cascade" }),
+    referenceMonth: text("reference_month").notNull(), // "YYYY-MM"
+    strategy: text("strategy").notNull(),
+    pct: numeric("pct", { precision: 8, scale: 4 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("investment_allocation_history_user_account_month_strategy_idx").on(
+      table.userId,
+      table.accountId,
+      table.referenceMonth,
+      table.strategy
+    ),
+  ]
+);
+
+// ── Investment Events (dividends, redeems, etc.) ───────
+export const investmentEvents = pgTable("investment_events", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  reportId: uuid("report_id")
+    .notNull()
+    .references(() => investmentReports.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull(),
+  eventDate: date("event_date"),
+  ticker: text("ticker"),
+  eventType: text("event_type").notNull(), // "dividendo","jcp","rendimento","fracao","vencimento","resgate","aplicacao"
+  amount: numeric("amount", { precision: 14, scale: 2 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ── Investment Liquidity Buckets ───────────────────────
+export const investmentLiquidity = pgTable("investment_liquidity", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  reportId: uuid("report_id")
+    .notNull()
+    .references(() => investmentReports.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull(),
+  bucket: text("bucket").notNull(), // "0_1","2_5","6_15","16_30","31_90","91_180","more_180"
+  amount: numeric("amount", { precision: 14, scale: 2 }),
+  pct: numeric("pct", { precision: 8, scale: 4 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 // ── Insights Cache ─────────────────────────────────────
 export const insightsCache = pgTable(
   "insights_cache",

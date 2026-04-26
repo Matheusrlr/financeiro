@@ -25,8 +25,20 @@ export function resolveCardColor(card: { bankCode: string; color: string }): str
 
 export function detectDocumentType(filename: string): "credit_card_statement" | "investment_statement" {
   const lower = filename.toLowerCase()
-  const investmentKeywords = ["extrato", "invest", "portfolio", "xp", "btg", "warren", "genial", "modal", "clear", "rico"]
+  const investmentKeywords = [
+    "extrato", "invest", "portfolio", "xp", "btg", "warren", "genial", "modal", "clear", "rico",
+    "rentabilidade", "consolidado", "relatorio",
+  ]
   return investmentKeywords.some((k) => lower.includes(k))
     ? "investment_statement"
     : "credit_card_statement"
+}
+
+export function resolveBankColor(bankCode: string): string {
+  const code = bankCode.toLowerCase()
+  if (code === "inter") return "#EC811D"
+  if (code === "nubank") return "#800ACE"
+  if (code === "xp") return "#000000"
+  if (code === "btg") return "#0A3C5F"
+  return "#6366f1"
 }
